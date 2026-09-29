@@ -7,11 +7,17 @@ from analisador import calcular_score_governança
 CAMINHO_SAIDA = os.path.join(os.path.dirname(__file__), "index.html")
 
 def compilar_app():
-    registros, metas = carregar_dados_iniciais()
+    dados_iniciais = carregar_dados_iniciais()
+    
+    registros = dados_iniciais[0]
+    metas = dados_iniciais[1]
+    colaboradores = dados_iniciais[2] if len(dados_iniciais) > 2 else []
+
     score, detalhes = calcular_score_governança(registros, metas)
 
     json_registros = json.dumps(registros, ensure_ascii=False)
     json_metas = json.dumps(metas, ensure_ascii=False)
+    json_colaboradores = json.dumps(colaboradores, ensure_ascii=False)
 
     html_content = f"""<!DOCTYPE html>
 <html lang="pt-BR" class="dark">
@@ -24,7 +30,8 @@ def compilar_app():
     <style>
         body {{ background-color: #090d16; color: #cbd5e1; font-family: system-ui, -apple-system, sans-serif; }}
         .card {{ background-color: #111827; border: 1px solid #1e293b; border-radius: 0.75rem; }}
-        .input-field {{ background-color: #1f2937; border: 1px solid #374151; color: #white; border-radius: 0.375rem; padding: 0.5rem; width: 100%; }}
+        .input-field {{ background-color: #1f2937; border: 1px solid #374151; color: #ffffff; border-radius: 0.5rem; padding: 0.6rem; width: 100%; font-size: 0.875rem; }}
+        .input-field:focus {{ outline: none; border-color: #10b981; }}
     </style>
 </head>
 <body class="p-4 md:p-6">
@@ -41,12 +48,15 @@ def compilar_app():
                 <p class="text-sm text-slate-400 mt-1">Painel Interativo de Registros de Campo & Indicadores da Matriz CMPC</p>
             </div>
             
-            <div class="flex items-center gap-4">
-                <div class="card px-5 py-2.5 text-center border-emerald-500/40">
-                    <span class="text-xs text-slate-400 uppercase font-semibold">Índice Compliance CMPC</span>
-                    <div id="scoreDisplay" class="text-2xl font-black text-emerald-400">{score}%</div>
+            <div class="flex items-center gap-3">
+                <div class="card px-4 py-2 text-center border-emerald-500/40">
+                    <span class="text-[10px] text-slate-400 uppercase font-semibold">Índice Compliance CMPC</span>
+                    <div id="scoreDisplay" class="text-xl font-black text-emerald-400">{score}%</div>
                 </div>
-                <button onclick="abrirModal()" class="bg-emerald-600 hover:bg-emerald-500 text-white px-4 py-2.5 rounded-lg font-semibold text-sm transition flex items-center gap-2">
+                <button onclick="abrirModalColaborador()" class="bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 px-3 py-2.5 rounded-lg font-semibold text-xs transition flex items-center gap-2">
+                    👤 Gerenciar Colaboradores
+                </button>
+                <button onclick="abrirModal()" class="bg-emerald-600 hover:bg-emerald-500 text-white px-4 py-2.5 rounded-lg font-semibold text-xs transition flex items-center gap-2 shadow-lg shadow-emerald-900/20">
                     ➕ Novo Registro CMPC
                 </button>
             </div>
@@ -55,9 +65,8 @@ def compilar_app():
         <!-- CARDS DE METAS OBRIGATÓRIAS CMPC -->
         <div class="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-3 mb-6" id="cardsMetas"></div>
 
-        <!-- DASHBOARD PRINCIPAL (INSPIRADO NO LAYOUT DA CMPC) -->
+        <!-- DASHBOARD PRINCIPAL -->
         <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
-            <!-- Gráfico de Atingimento por Programa -->
             <div class="card p-5 lg:col-span-2">
                 <h2 class="text-base font-semibold text-white mb-4 flex items-center justify-between">
                     <span>📊 Desempenho por Programa de Segurança (Meta Semanal)</span>
@@ -66,29 +75,18 @@ def compilar_app():
                 <canvas id="chartMeta" height="110"></canvas>
             </div>
 
-            <!-- Visão por TST / Líder -->
             <div class="card p-5">
-                <h2 class="text-base font-semibold text-white mb-4">👤 Produção por Responsável</h2>
-                <div class="space-y-4">
-                    <div class="p-3 bg-slate-800/60 rounded-lg">
-                        <span class="text-xs text-slate-400 uppercase font-bold">TST Responsável</span>
-                        <div class="text-lg font-bold text-white">Raquel Carvalho - JB DIAS</div>
-                        <div class="w-full bg-slate-700 h-2 rounded-full mt-2">
-                            <div class="bg-emerald-500 h-2 rounded-full" style="width: 85%"></div>
-                        </div>
-                    </div>
-                    <div class="p-3 bg-slate-800/60 rounded-lg">
-                        <span class="text-xs text-slate-400 uppercase font-bold">Líder Operacional</span>
-                        <div class="text-lg font-bold text-white">Josinei Buchor - JB DIAS</div>
-                        <div class="w-full bg-slate-700 h-2 rounded-full mt-2">
-                            <div class="bg-blue-500 h-2 rounded-full" style="width: 70%"></div>
-                        </div>
-                    </div>
+                <div class="flex justify-between items-center mb-4">
+                    <h2 class="text-base font-semibold text-white">👥 Equipe Cadastrada</h2>
+                    <button onclick="abrirModalColaborador()" class="text-emerald-400 hover:text-emerald-300 font-bold text-xs">+ Adicionar</button>
+                </div>
+                <div class="space-y-2 max-h-[220px] overflow-y-auto pr-1" id="listaColaboradoresResumo">
+                    <!-- Preenchido via JS -->
                 </div>
             </div>
         </div>
 
-        <!-- TABELA INTERATIVA DOS REGISTROS (DETALHES DO REGISTRO) -->
+        <!-- TABELA INTERATIVA DOS REGISTROS -->
         <div class="card p-5">
             <div class="flex justify-between items-center mb-4">
                 <h2 class="text-base font-semibold text-white">📋 Detalhes dos Registros de Campo (CMPC / IPS / CUIDAR)</h2>
@@ -101,10 +99,11 @@ def compilar_app():
                         <tr>
                             <th class="p-3">Data</th>
                             <th class="p-3">Programa</th>
+                            <th class="p-3">Colaborador / Função</th>
                             <th class="p-3">TST / Líder</th>
-                            <th class="p-3">Houve Desvio?</th>
-                            <th class="p-3">Pessoas em Desvio</th>
-                            <th class="p-3">Descrição do Desvio / Ação</th>
+                            <th class="p-3">Desvio?</th>
+                            <th class="p-3">Pessoas</th>
+                            <th class="p-3">Observações / Apontamentos</th>
                             <th class="p-3 text-center">Ações</th>
                         </tr>
                     </thead>
@@ -114,20 +113,60 @@ def compilar_app():
         </div>
     </div>
 
-    <!-- MODAL DE CADASTRO / EDIÇÃO -->
-    <div id="modalRegistro" class="fixed inset-0 bg-black/75 hidden items-center justify-center p-4 z-50">
-        <div class="card p-6 max-w-lg w-full">
-            <h3 class="text-lg font-bold text-white mb-4" id="modalTitulo">Lançar Registro CMPC</h3>
+    <!-- MODAL DE ADICIONAR / REMOVER COLABORADOR -->
+    <div id="modalColaborador" class="fixed inset-0 bg-black/80 backdrop-blur-sm hidden items-center justify-center p-4 z-50">
+        <div class="card p-6 max-w-md w-full border border-slate-700 shadow-2xl">
+            <div class="flex justify-between items-center border-b border-slate-800 pb-3 mb-4">
+                <h3 class="text-base font-bold text-white">👤 Gerenciar Colaboradores</h3>
+                <button onclick="fecharModalColaborador()" class="text-slate-400 hover:text-white font-bold text-lg">&times;</button>
+            </div>
+
+            <form onsubmit="salvarColaborador(event)" class="space-y-4 text-sm mb-6">
+                <div>
+                    <label class="block text-xs font-semibold text-slate-300 mb-1">Nome Completo</label>
+                    <input type="text" id="novoNomeColab" required placeholder="Ex: Roberto Alves" class="input-field">
+                </div>
+                <div>
+                    <label class="block text-xs font-semibold text-slate-300 mb-1">Cargo / Função</label>
+                    <input type="text" id="novoCargoColab" required placeholder="Ex: TST, Operador, Líder Operacional, Mecânico..." class="input-field">
+                </div>
+
+                <div class="flex justify-end gap-3 pt-2">
+                    <button type="submit" class="w-full py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-500 font-semibold text-xs shadow-md shadow-emerald-900/30">Cadastrar Colaborador</button>
+                </div>
+            </form>
+
+            <div class="border-t border-slate-800 pt-3">
+                <span class="text-xs font-bold text-slate-400 uppercase tracking-wider block mb-2">Lista de Integrantes</span>
+                <div class="space-y-2 max-h-48 overflow-y-auto pr-1" id="modalListaColaboradores">
+                    <!-- Lista com botão de exclusão -->
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL DE NOVO REGISTRO / EDIÇÃO -->
+    <div id="modalRegistro" class="fixed inset-0 bg-black/80 backdrop-blur-sm hidden items-center justify-center p-4 z-50">
+        <div class="card p-6 max-w-2xl w-full border border-slate-700 shadow-2xl">
+            <div class="flex justify-between items-center border-b border-slate-800 pb-3 mb-4">
+                <div>
+                    <h3 class="text-lg font-bold text-white" id="modalTitulo">➕ Novo Registro CMPC</h3>
+                    <p class="text-xs text-slate-400">Preencha os campos abaixo com dados rápidos dos colaboradores</p>
+                </div>
+                <button onclick="fecharModal()" class="text-slate-400 hover:text-white font-bold text-lg">&times;</button>
+            </div>
+
             <form id="formRegistro" onsubmit="salvarRegistro(event)" class="space-y-4 text-sm">
                 <input type="hidden" id="regId">
-                <div class="grid grid-cols-2 gap-3">
+
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div>
-                        <label class="block text-xs text-slate-400 mb-1">Data</label>
-                        <input type="date" id="regData" required class="input-field text-white">
+                        <label class="block text-xs font-semibold text-slate-300 mb-1">📅 Data do Registro</label>
+                        <input type="date" id="regData" required class="input-field">
                     </div>
                     <div>
-                        <label class="block text-xs text-slate-400 mb-1">Programa CMPC</label>
-                        <select id="regPrograma" class="input-field text-white">
+                        <label class="block text-xs font-semibold text-slate-300 mb-1">📌 Programa CMPC</label>
+                        <select id="regPrograma" class="input-field">
                             <option value="CUIDAR">CUIDAR (Meta: 4/sem)</option>
                             <option value="IPS">IPS (Meta: 2/sem)</option>
                             <option value="Relatório de Inspeção">Relatório de Inspeção (Meta: 2/sem)</option>
@@ -139,39 +178,47 @@ def compilar_app():
                     </div>
                 </div>
 
-                <div class="grid grid-cols-2 gap-3">
-                    <div>
-                        <label class="block text-xs text-slate-400 mb-1">TST Responsável</label>
-                        <input type="text" id="regTST" value="Raquel Carvalho" required class="input-field text-white">
-                    </div>
-                    <div>
-                        <label class="block text-xs text-slate-400 mb-1">Líder Responsável</label>
-                        <input type="text" id="regLider" value="Josinei Buchor" required class="input-field text-white">
+                <div class="p-3 bg-slate-900/60 rounded-lg border border-slate-800 space-y-3">
+                    <span class="text-xs font-bold text-emerald-400 uppercase tracking-wider block">👥 Envolvidos & Responsáveis</span>
+                    
+                    <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                        <div>
+                            <label class="block text-xs text-slate-400 mb-1">Colaborador Observado</label>
+                            <select id="regColaborador" class="input-field text-white"></select>
+                        </div>
+                        <div>
+                            <label class="block text-xs text-slate-400 mb-1">TST Responsável</label>
+                            <select id="regTST" class="input-field text-white"></select>
+                        </div>
+                        <div>
+                            <label class="block text-xs text-slate-400 mb-1">Líder Operacional</label>
+                            <select id="regLider" class="input-field text-white"></select>
+                        </div>
                     </div>
                 </div>
 
-                <div class="grid grid-cols-2 gap-3">
+                <div class="grid grid-cols-2 gap-4">
                     <div>
-                        <label class="block text-xs text-slate-400 mb-1">Ocorreram Desvios?</label>
-                        <select id="regDesvio" class="input-field text-white">
+                        <label class="block text-xs font-semibold text-slate-300 mb-1">⚠ Houve Desvio?</label>
+                        <select id="regDesvio" class="input-field">
                             <option value="Sim">Sim</option>
                             <option value="Não">Não</option>
                         </select>
                     </div>
                     <div>
-                        <label class="block text-xs text-slate-400 mb-1">Qtd Pessoas em Desvio</label>
-                        <input type="number" id="regPessoas" value="0" min="0" class="input-field text-white">
+                        <label class="block text-xs font-semibold text-slate-300 mb-1">🔢 Qtd. Pessoas Envolvidas</label>
+                        <input type="number" id="regPessoas" value="1" min="0" class="input-field">
                     </div>
                 </div>
 
                 <div>
-                    <label class="block text-xs text-slate-400 mb-1">Descrição do Desvio / Apontamento</label>
-                    <textarea id="regDescricao" rows="3" required class="input-field text-white" placeholder="Descreva a condição observada..."></textarea>
+                    <label class="block text-xs font-semibold text-slate-300 mb-1">📝 Observação / Descrição do Apontamento</label>
+                    <textarea id="regDescricao" rows="3" required class="input-field" placeholder="Descreva apenas os fatos observados, ações corretivas ou notas de campo..."></textarea>
                 </div>
 
-                <div class="flex justify-end gap-3 pt-2">
-                    <button type="button" onclick="fecharModal()" class="px-4 py-2 bg-slate-700 text-white rounded-lg hover:bg-slate-600">Cancelar</button>
-                    <button type="submit" class="px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-500 font-semibold">Salvar Registro</button>
+                <div class="flex justify-end gap-3 pt-3 border-t border-slate-800">
+                    <button type="button" onclick="fecharModal()" class="px-4 py-2 bg-slate-700 text-slate-200 rounded-lg hover:bg-slate-600 font-medium text-xs">Cancelar</button>
+                    <button type="submit" class="px-5 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-500 font-semibold text-xs shadow-md shadow-emerald-900/30">Salvar Registro</button>
                 </div>
             </form>
         </div>
@@ -180,13 +227,131 @@ def compilar_app():
     <script>
         let registros = {json_registros};
         const metasCMPC = {json_metas};
+        let colaboradores = {json_colaboradores};
         let chartInstance = null;
+
+        function renderizarColaboradoresResumo() {{
+            const div = document.getElementById("listaColaboradoresResumo");
+            div.innerHTML = "";
+            colaboradores.forEach((c, idx) => {{
+                div.innerHTML += `
+                    <div class="p-2 bg-slate-800/60 rounded border border-slate-700/50 flex justify-between items-center text-xs">
+                        <div>
+                            <span class="font-bold text-white block">${{c.nome}}</span>
+                            <span class="text-slate-400 text-[11px]">${{c.funcao}}</span>
+                        </div>
+                        <button onclick="excluirColaborador(${{idx}})" class="text-red-400 hover:text-red-300 font-bold text-xs p-1">🗑️</button>
+                    </div>
+                `;
+            }});
+        }}
+
+        function popularModalListaColaboradores() {{
+            const div = document.getElementById("modalListaColaboradores");
+            div.innerHTML = "";
+            if (colaboradores.length === 0) {{
+                div.innerHTML = '<span class="text-xs text-slate-500">Nenhum colaborador cadastrado.</span>';
+                return;
+            }}
+            colaboradores.forEach((c, idx) => {{
+                div.innerHTML += `
+                    <div class="p-2 bg-slate-900/80 rounded border border-slate-800 flex justify-between items-center text-xs">
+                        <div>
+                            <span class="font-bold text-white">${{c.nome}}</span>
+                            <span class="text-slate-400 text-[11px] ml-1">(${{c.funcao}})</span>
+                        </div>
+                        <button onclick="excluirColaborador(${{idx}})" class="text-red-400 hover:text-red-300 font-bold text-xs">Excluir</button>
+                    </div>
+                `;
+            }});
+        }}
+
+        function popularDropdownsColaboradores() {{
+            const selColab = document.getElementById("regColaborador");
+            const selTST = document.getElementById("regTST");
+            const selLider = document.getElementById("regLider");
+
+            selColab.innerHTML = "";
+            selTST.innerHTML = "";
+            selLider.innerHTML = "";
+
+            if (colaboradores.length === 0) {{
+                selColab.innerHTML = '<option value="N/A">Sem colaboradores</option>';
+                selTST.innerHTML = '<option value="Raquel Carvalho (TST)">Raquel Carvalho (TST)</option>';
+                selLider.innerHTML = '<option value="Josinei Buchor (Líder Operacional)">Josinei Buchor (Líder Operacional)</option>';
+                return;
+            }}
+
+            colaboradores.forEach(c => {{
+                const optText = `${{c.nome}} (${{c.funcao}})`;
+                const opt = `<option value="${{c.nome}}">${{optText}}</option>`;
+                
+                selColab.innerHTML += opt;
+                
+                const funcUpper = c.funcao.toUpperCase();
+                if (funcUpper.includes("TST") || funcUpper.includes("SUPERVISOR") || funcUpper.includes("EHS")) {{
+                    selTST.innerHTML += opt;
+                }}
+                if (funcUpper.includes("LÍDER") || funcUpper.includes("LIDER") || funcUpper.includes("SUPERVISOR") || funcUpper.includes("GERENTE")) {{
+                    selLider.innerHTML += opt;
+                }}
+            }});
+
+            if (!selTST.innerHTML) selTST.innerHTML = selColab.innerHTML;
+            if (!selLider.innerHTML) selLider.innerHTML = selColab.innerHTML;
+        }}
+
+        function abrirModalColaborador() {{
+            document.getElementById("novoNomeColab").value = "";
+            document.getElementById("novoCargoColab").value = "";
+            popularModalListaColaboradores();
+            document.getElementById("modalColaborador").classList.remove("hidden");
+            document.getElementById("modalColaborador").classList.add("flex");
+        }}
+
+        function fecharModalColaborador() {{
+            document.getElementById("modalColaborador").classList.add("hidden");
+            document.getElementById("modalColaborador").classList.remove("flex");
+        }}
+
+        function salvarColaborador(e) {{
+            e.preventDefault();
+            const nome = document.getElementById("novoNomeColab").value.trim();
+            const funcao = document.getElementById("novoCargoColab").value.trim();
+
+            if (!nome || !funcao) return;
+
+            const novoColab = {{
+                id: "COL-" + (colaboradores.length + 1).toString().padStart(3, '0'),
+                nome: nome,
+                funcao: funcao,
+                empresa: "JB DIAS"
+            }};
+
+            colaboradores.push(novoColab);
+            document.getElementById("novoNomeColab").value = "";
+            document.getElementById("novoCargoColab").value = "";
+            
+            popularModalListaColaboradores();
+            popularDropdownsColaboradores();
+            renderizarColaboradoresResumo();
+        }}
+
+        function excluirColaborador(idx) {{
+            if (confirm("Deseja remover " + colaboradores[idx].nome + " da lista de colaboradores?")) {{
+                colaboradores.splice(idx, 1);
+                popularModalListaColaboradores();
+                popularDropdownsColaboradores();
+                renderizarColaboradoresResumo();
+            }}
+        }}
 
         function renderizar() {{
             atualizarTabela();
             atualizarMetasCards();
             atualizarGrafico();
             atualizarScore();
+            renderizarColaboradoresResumo();
         }}
 
         function atualizarTabela() {{
@@ -198,9 +363,10 @@ def compilar_app():
                     <tr class="hover:bg-slate-800/50">
                         <td class="p-3 font-mono text-xs text-slate-400">${{r.data}}</td>
                         <td class="p-3 font-semibold text-emerald-400">${{r.programa}}</td>
+                        <td class="p-3 text-xs text-white font-medium">${{r.colaborador_envolvido || "N/A"}}</td>
                         <td class="p-3 text-xs">${{r.responsavel}}<br><span class="text-slate-500">Líder: ${{r.lider}}</span></td>
-                        <td class="p-3"><span class="${{r.houve_desvio === 'Sim' ? 'text-amber-400 font-bold' : 'text-slate-400'}}">${{r.houve_desvio}}</span></td>
-                        <td class="p-3 text-center">${{r.qtd_pessoas}}</td>
+                        <td class="p-3"><span class="${{r.houve_desvio === 'Sim' ? 'bg-amber-500/10 text-amber-400 border border-amber-500/30 text-[11px] px-2 py-0.5 rounded font-bold' : 'text-slate-400'}}">${{r.houve_desvio}}</span></td>
+                        <td class="p-3 text-center text-xs font-bold">${{r.qtd_pessoas}}</td>
                         <td class="p-3 text-xs text-slate-300 max-w-xs truncate">${{r.descricao}}</td>
                         <td class="p-3 text-center space-x-2">
                             <button onclick="editarRegistro(${{idx}})" class="text-blue-400 hover:text-blue-300 font-bold text-xs">Editar</button>
@@ -266,12 +432,12 @@ def compilar_app():
             }});
         }}
 
-        // ACOES CRUD
         function abrirModal() {{
+            popularDropdownsColaboradores();
             document.getElementById("regId").value = "";
             document.getElementById("regData").value = new Date().toISOString().split('T')[0];
             document.getElementById("regDescricao").value = "";
-            document.getElementById("modalTitulo").innerText = "Lançar Registro CMPC";
+            document.getElementById("modalTitulo").innerText = "➕ Novo Registro CMPC";
             document.getElementById("modalRegistro").classList.remove("hidden");
             document.getElementById("modalRegistro").classList.add("flex");
         }}
@@ -289,6 +455,7 @@ def compilar_app():
                 data: document.getElementById("regData").value,
                 programa: document.getElementById("regPrograma").value,
                 empresa: "JB DIAS",
+                colaborador_envolvido: document.getElementById("regColaborador").value,
                 responsavel: document.getElementById("regTST").value,
                 lider: document.getElementById("regLider").value,
                 houve_desvio: document.getElementById("regDesvio").value,
@@ -308,17 +475,19 @@ def compilar_app():
         }}
 
         function editarRegistro(idx) {{
+            popularDropdownsColaboradores();
             const r = registros[idx];
             document.getElementById("regId").value = idx;
             document.getElementById("regData").value = r.data;
             document.getElementById("regPrograma").value = r.programa;
-            document.getElementById("regTST").value = r.responsavel;
-            document.getElementById("regLider").value = r.lider;
+            if (r.colaborador_envolvido) document.getElementById("regColaborador").value = r.colaborador_envolvido;
+            if (r.responsavel) document.getElementById("regTST").value = r.responsavel;
+            if (r.lider) document.getElementById("regLider").value = r.lider;
             document.getElementById("regDesvio").value = r.houve_desvio;
             document.getElementById("regPessoas").value = r.qtd_pessoas;
             document.getElementById("regDescricao").value = r.descricao;
 
-            document.getElementById("modalTitulo").innerText = "Editar Registro CMPC";
+            document.getElementById("modalTitulo").innerText = "✏️ Editar Registro CMPC";
             document.getElementById("modalRegistro").classList.remove("hidden");
             document.getElementById("modalRegistro").classList.add("flex");
         }}
@@ -330,7 +499,6 @@ def compilar_app():
             }}
         }}
 
-        // Inicialização
         renderizar();
     </script>
 </body>
@@ -341,7 +509,7 @@ def compilar_app():
         f.write(html_content)
 
     webbrowser.open(CAMINHO_SAIDA)
-    print(f"✅ App JB DIAS EHS gerado com sucesso em: {CAMINHO_SAIDA}")
+    print(f"✅ App JB DIAS EHS atualizado e gerado em: {CAMINHO_SAIDA}")
 
 if __name__ == "__main__":
     compilar_app()
